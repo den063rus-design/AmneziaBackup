@@ -75,7 +75,8 @@ port_check() {
 
 # Restore immediately. No pre-restore archive is created.
 restore_protocol() {
-  local c=$1 source=$2 target=$3 old="${target}.pre-restore-${STAMP}"
+  local c=$1 source=$2 target=$3
+  local old="${target}.pre-restore-${STAMP}"
   if [[ $(docker inspect -f '{{.State.Running}}' "$c") == true ]]; then docker stop "$c" >>"$LOG_FILE" 2>&1; STOPPED+=("$c"); fi
   docker exec "$c" sh -c "[ -e '$target' ] && mv '$target' '$old'; mkdir -p '$target'"
   ROLLBACK_DIRS+=("$c|$target|$old")

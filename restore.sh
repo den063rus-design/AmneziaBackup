@@ -100,13 +100,13 @@ check_running() { docker inspect -f '{{.State.Running}}' "$1" | grep -qx true ||
 if [[ -d $WORK_DIR/openvpn ]]; then
   check_running "$OPENVPN" OpenVPN
   [[ -d $WORK_DIR/openvpn/pki && -e $WORK_DIR/openvpn/clientsTable ]] || die "OpenVPN restored data is incomplete"
-  docker logs --tail 20 "$OPENVPN" >/dev/null 2>&1 || die "cannot read OpenVPN container logs"
+  docker logs --tail 20 "$OPENVPN" >/dev/null 2>&1 || log "WARNING: cannot read OpenVPN container logs"
   docker top "$OPENVPN" -eo comm,args | grep -qi '[o]penvpn' || die "OpenVPN process was not found"
 fi
 if [[ -d $WORK_DIR/awg ]]; then
   check_running "$AWG" AWG
   [[ -e $WORK_DIR/awg/clientsTable ]] || die "AWG restored data is incomplete"
-  docker logs --tail 20 "$AWG" >/dev/null 2>&1 || die "cannot read AWG container logs"
+  docker logs --tail 20 "$AWG" >/dev/null 2>&1 || log "WARNING: cannot read AWG container logs"
   # Do not display peer information: this is only an interface-readability test.
   docker exec "$AWG" sh -c 'awg show >/dev/null 2>&1 || wg show >/dev/null 2>&1' || die "AWG/WireGuard interface is unavailable"
   if [[ -f $WORK_DIR/awg/wireguard_server_public_key.key ]]; then

@@ -10,13 +10,14 @@ log() { [[ -d $LOGS_DIR ]] && printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$LOG_F
 die() { echo "ERROR: $*" >&2; log "ERROR: $*"; exit 1; }
 cleanup() {
   local i
+  # docker exec cannot run in a stopped container, so restart first.
+  for i in "${STOPPED[@]}"; do docker start "$i" >>"$LOG_FILE" 2>&1 || true; done
   if (( ! COMMITTED )); then
     for i in "${!ROLLBACK_DIRS[@]}"; do
       IFS='|' read -r c path old <<<"${ROLLBACK_DIRS[$i]}"
       docker exec "$c" sh -c "rm -rf '$path'; [ ! -e '$old' ] || mv '$old' '$path'" >>"$LOG_FILE" 2>&1 || true
     done
   fi
-  for i in "${STOPPED[@]}"; do docker start "$i" >>"$LOG_FILE" 2>&1 || true; done
   if [[ -n $WORK_DIR && -d $WORK_DIR ]]; then rm -rf -- "$WORK_DIR"; fi
 }
 trap cleanup EXIT
@@ -77,9 +78,17 @@ port_check() {
 restore_protocol() {
   local c=$1 source=$2 target=$3
   local old="${target}.pre-restore-${STAMP}"
-  if [[ $(docker inspect -f '{{.State.Running}}' "$c") == true ]]; then docker stop "$c" >>"$LOG_FILE" 2>&1; STOPPED+=("$c"); fi
+  local was_running
+  was_running=$(docker inspect -f '{{.State.Running}}' "$c")
+
+  # Prepare the destination while docker exec is available.
+  if [[ $was_running != true ]]; then docker start "$c" >>"$LOG_FILE" 2>&1; fi
   docker exec "$c" sh -c "[ -e '$target' ] && mv '$target' '$old'; mkdir -p '$target'"
   ROLLBACK_DIRS+=("$c|$target|$old")
+
+  # Stop before replacing protocol data, then copy into the stopped container.
+  docker stop "$c" >>"$LOG_FILE" 2>&1
+  STOPPED+=("$c")
   docker cp "$source/." "$c:$target/"
   docker start "$c" >>"$LOG_FILE" 2>&1
   STOPPED=()

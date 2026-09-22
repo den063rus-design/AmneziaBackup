@@ -73,8 +73,7 @@ port_check() {
 [[ -n $OPENVPN ]] && port_check "$OLD_OPEN_PORTS" "$OPENVPN" OpenVPN
 [[ -n $AWG ]] && port_check "$OLD_AWG_PORTS" "$AWG" AWG
 
-# A complete current-state rollback archive is mandatory before changes.
-"$BASE_DIR/backup.sh" --prefix=pre-restore >>"$LOG_FILE" 2>&1 || die "pre-restore backup failed; no changes made"
+# Restore immediately. No pre-restore archive is created.
 restore_protocol() {
   local c=$1 source=$2 target=$3 old="${target}.pre-restore-${STAMP}"
   if [[ $(docker inspect -f '{{.State.Running}}' "$c") == true ]]; then docker stop "$c" >>"$LOG_FILE" 2>&1; STOPPED+=("$c"); fi
@@ -106,8 +105,7 @@ if [[ -d $WORK_DIR/awg ]]; then
     [[ -n $new_hash && $old_hash == "$new_hash" ]] || die "restored AWG server public key does not match backup"
   fi
 fi
-# The original data are now covered by the mandatory pre-restore archive; remove
-# the in-container temporary copies only after all checks above have passed.
+# Remove the in-container temporary copies only after all checks above have passed.
 for entry in "${ROLLBACK_DIRS[@]}"; do
   IFS='|' read -r c _ old <<<"$entry"
   docker exec "$c" sh -c "rm -rf '$old'" >>"$LOG_FILE" 2>&1

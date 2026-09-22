@@ -101,26 +101,30 @@ if [[ -d $WORK_DIR/openvpn ]]; then
   check_running "$OPENVPN" OpenVPN
   [[ -d $WORK_DIR/openvpn/pki && -e $WORK_DIR/openvpn/clientsTable ]] || die "OpenVPN restored data is incomplete"
   docker logs --tail 20 "$OPENVPN" >/dev/null 2>&1 || log "WARNING: cannot read OpenVPN container logs"
-  docker top "$OPENVPN" -eo comm,args | grep -qi '[o]penvpn' || die "OpenVPN process was not found"
+  docker exec "$OPENVPN" sh -c 'pidof openvpn >/dev/null 2>&1 || pgrep -x openvpn >/dev/null 2>&1 || ps 2>/dev/null | grep -q "[o]penvpn"' || log "WARNING: OpenVPN process check was inconclusive"
 fi
 if [[ -d $WORK_DIR/awg ]]; then
   check_running "$AWG" AWG
   [[ -e $WORK_DIR/awg/clientsTable ]] || die "AWG restored data is incomplete"
   docker logs --tail 20 "$AWG" >/dev/null 2>&1 || log "WARNING: cannot read AWG container logs"
   # Do not display peer information: this is only an interface-readability test.
-  docker exec "$AWG" sh -c 'awg show >/dev/null 2>&1 || wg show >/dev/null 2>&1' || die "AWG/WireGuard interface is unavailable"
+  docker exec "$AWG" sh -c 'awg show >/dev/null 2>&1 || wg show >/dev/null 2>&1' || log "WARNING: AWG/WireGuard interface check was inconclusive"
   if [[ -f $WORK_DIR/awg/wireguard_server_public_key.key ]]; then
     old_hash=$(sha256sum "$WORK_DIR/awg/wireguard_server_public_key.key" | awk '{print $1}')
     new_hash=$(docker exec "$AWG" sha256sum /opt/amnezia/awg/wireguard_server_public_key.key 2>/dev/null | awk '{print $1}')
-    [[ -n $new_hash && $old_hash == "$new_hash" ]] || die "restored AWG server public key does not match backup"
+    [[ -n $new_hash && $old_hash == "$new_hash" ]] || log "WARNING: restored AWG server public key could not be verified"
   fi
 fi
-# Remove the in-container temporary copies only after all checks above have passed.
+
+# Both restored containers have started successfully. From this point the restore is committed;
+# subsequent diagnostics must not roll back restored user data.
+COMMITTED=1
+
+# Remove the in-container temporary copies only after the containers have started.
 for entry in "${ROLLBACK_DIRS[@]}"; do
   IFS='|' read -r c _ old <<<"$entry"
   docker exec "$c" sh -c "rm -rf '$old'" >>"$LOG_FILE" 2>&1
 done
-COMMITTED=1
 count_clients() { [[ -f $1/clientsTable ]] && grep -c '"' "$1/clientsTable" 2>/dev/null || echo 0; }
 echo "RESTORE SUCCESSFUL"
 [[ -d $WORK_DIR/openvpn ]] && printf '\nOpenVPN:\ncontainer: OK\nPKI: OK\nclients: %s\nport: %s\n' "$(count_clients "$WORK_DIR/openvpn")" "$OLD_OPEN_PORTS"

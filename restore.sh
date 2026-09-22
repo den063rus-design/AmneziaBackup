@@ -48,7 +48,28 @@ OPENVPN=$(container_id amnezia-openvpn || true); AWG2=$(container_id amnezia-awg
 if [[ -d $WORK_DIR/awg && -n $OLD_AWG_NAME && $OLD_AWG_NAME != "$( [[ -n $AWG2 ]] && echo amnezia-awg2 || echo amnezia-awg )" ]]; then
   die "AWG container generation mismatch ($OLD_AWG_NAME backup vs current); use a compatible legacy container or --container-images"
 fi
-port_check() { local old=$1 id=$2 label=$3 new; [[ -z $old || $old == n/a ]] && return; new=$(docker port "$id" 2>/dev/null | tr '\n' ';'); [[ $old == "$new" ]] || { echo "ERROR: PORT MISMATCH" >&2; echo "Old $label: $old" >&2; echo "Current $label: $new" >&2; die "port mapping differs; no changes made"; }; }
+normalize_ports() {
+  local value=$1 line cport hport
+  while IFS= read -r line; do
+    [[ -n $line ]] || continue
+    cport=${line%% -> *}
+    hport=${line##*:}
+    printf '%s=%s\n' "$cport" "$hport"
+  done < <(printf '%s' "$value" | tr ';' '\n') | sort -u
+}
+port_check() {
+  local old=$1 id=$2 label=$3 new old_norm new_norm
+  [[ -z $old || $old == n/a ]] && return
+  new=$(docker port "$id" 2>/dev/null | tr '\n' ';')
+  old_norm=$(normalize_ports "$old")
+  new_norm=$(normalize_ports "$new")
+  [[ $old_norm == "$new_norm" ]] || {
+    echo "ERROR: PORT MISMATCH" >&2
+    echo "Old $label: $old" >&2
+    echo "Current $label: $new" >&2
+    die "port mapping differs; no changes made"
+  }
+}
 [[ -n $OPENVPN ]] && port_check "$OLD_OPEN_PORTS" "$OPENVPN" OpenVPN
 [[ -n $AWG ]] && port_check "$OLD_AWG_PORTS" "$AWG" AWG
 

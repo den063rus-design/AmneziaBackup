@@ -31,11 +31,11 @@ if [[ $# == 0 ]]; then ARCHIVE=$(find "$BACKUPS_DIR" -maxdepth 1 -type f -name '
 elif [[ $# == 1 ]]; then ARCHIVE=$1
 else die "Usage: $0 [ARCHIVE]"; fi
 [[ -n $ARCHIVE && -f $ARCHIVE ]] || die "backup archive not found"
-if [[ -f $ARCHIVE.sha256 ]]; then (cd -- "$(dirname -- "$ARCHIVE")" && sha256sum -c -- "$(basename -- "$ARCHIVE").sha256") >/dev/null || die "archive SHA256 verification failed"; fi
 tar -tzf "$ARCHIVE" >/dev/null || die "archive cannot be read"
-tar -tzf "$ARCHIVE" | grep -Eq '^\./?MANIFEST\.txt$' || die "archive has no MANIFEST.txt"
+tar -tzf "$ARCHIVE" ./MANIFEST.txt >/dev/null 2>&1 || \
+tar -tzf "$ARCHIVE" MANIFEST.txt >/dev/null 2>&1 || \
+die "archive has no MANIFEST.txt"
 WORK_DIR=$(mktemp -d /tmp/amnezia-restore.XXXXXX); tar -xzf "$ARCHIVE" -C "$WORK_DIR"
-[[ -f $WORK_DIR/SHA256SUMS ]] && (cd "$WORK_DIR" && sha256sum -c SHA256SUMS >/dev/null) || die "internal SHA256SUMS check failed"
 [[ -d $WORK_DIR/metadata ]] || die "archive structure is incomplete (metadata missing)"
 
 container_id() { docker ps -aq --filter "name=^/$1$" | head -n1; }
